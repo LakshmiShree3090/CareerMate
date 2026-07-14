@@ -1,12 +1,26 @@
 import { useEffect, useState } from 'react'
+import {
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
+  Title,
+  Tooltip,
+} from 'chart.js'
+import { Bar } from 'react-chartjs-2'
 import { useNavigate } from 'react-router-dom'
 
 import api from '../services/api'
 import ResumeSection from '../components/ResumeSection'
 
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+
 function Dashboard() {
   const navigate = useNavigate()
   const [applications, setApplications] = useState([])
+  const [resumeFilename, setResumeFilename] = useState('')
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const hasToken = Boolean(localStorage.getItem('token'))
 
   useEffect(() => {
@@ -26,6 +40,17 @@ function Dashboard() {
 
     loadApplications()
 
+    async function loadResume() {
+      try {
+        const response = await api.get('/api/resume')
+        setResumeFilename(response.data.filename || '')
+      } catch {
+        setResumeFilename('')
+      }
+    }
+
+    loadResume()
+
     window.addEventListener('applicationsUpdated', loadApplications)
     return () => window.removeEventListener('applicationsUpdated', loadApplications)
   }, [hasToken, navigate])
@@ -36,6 +61,32 @@ function Dashboard() {
     { label: 'Selected', value: applications.filter((application) => application.status?.toLowerCase() === 'selected').length, color: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
     { label: 'Rejected', value: applications.filter((application) => application.status?.toLowerCase() === 'rejected').length, color: 'border-rose-200 bg-rose-50 text-rose-700' },
   ]
+
+  const chartData = {
+    labels: ['Pending', 'Selected', 'Rejected'],
+    datasets: [
+      {
+        label: 'Applications',
+        data: [summaryCards[1].value, summaryCards[2].value, summaryCards[3].value],
+        backgroundColor: ['#f59e0b', '#10b981', '#f43f5e'],
+        borderRadius: 4,
+      },
+    ],
+  }
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      title: {
+        display: true,
+        text: 'Application Status',
+      },
+      legend: {
+        display: false,
+      },
+    },
+  }
 
   function handleLogout() {
     localStorage.removeItem('token')
@@ -62,13 +113,36 @@ function Dashboard() {
               View Applications
             </button>
           </div>
-          <button
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-            onClick={handleLogout}
-            type="button"
-          >
-            Logout
-          </button>
+          <div className="relative">
+            <button
+              aria-expanded={isProfileMenuOpen}
+              aria-label="Profile menu"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white transition hover:bg-blue-700"
+              onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
+              type="button"
+            >
+              P
+            </button>
+
+            {isProfileMenuOpen && (
+              <div className="absolute right-0 top-11 z-10 w-32 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={() => navigate('/profile')}
+                  type="button"
+                >
+                  Profile
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={handleLogout}
+                  type="button"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </header>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -80,7 +154,29 @@ function Dashboard() {
           ))}
         </section>
 
+        <section className="mt-8 h-80 rounded-lg border border-slate-200 bg-white p-5">
+          <Bar data={chartData} options={chartOptions} />
+        </section>
+
         <ResumeSection />
+
+        {resumeFilename && (
+          <section className="mt-4 flex flex-col gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-emerald-700">Resume Uploaded ✓</p>
+              <p className="mt-2 text-sm text-slate-700">
+                Current Resume: <span className="font-medium">{resumeFilename}</span>
+              </p>
+            </div>
+            <button
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+              onClick={() => navigate('/resume-analysis')}
+              type="button"
+            >
+              Analyze Resume
+            </button>
+          </section>
+        )}
       </div>
     </main>
   )

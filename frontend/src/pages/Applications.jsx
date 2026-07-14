@@ -5,6 +5,8 @@ import api from '../services/api'
 
 function Applications() {
   const [applications, setApplications] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -124,6 +126,17 @@ function Applications() {
     return null
   }
 
+  const filteredApplications = applications.filter((application) => {
+    const searchText = searchTerm.toLowerCase()
+    const matchesSearch =
+      application.company.toLowerCase().includes(searchText) ||
+      application.role.toLowerCase().includes(searchText)
+    const matchesStatus =
+      statusFilter === 'All' || application.status.toLowerCase() === statusFilter.toLowerCase()
+
+    return matchesSearch && matchesStatus
+  })
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-6xl">
@@ -146,6 +159,27 @@ function Applications() {
 
         {error && <p className="mt-5 text-sm text-rose-600">{error}</p>}
 
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 sm:max-w-md"
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search by company or role"
+            type="search"
+            value={searchTerm}
+          />
+          <select
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100"
+            onChange={(event) => setStatusFilter(event.target.value)}
+            value={statusFilter}
+          >
+            <option value="All">All</option>
+            <option value="Applied">Applied</option>
+            <option value="Interview">Interview</option>
+            <option value="Selected">Selected</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+
         <div className="mt-8 overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-100 text-slate-700">
@@ -158,7 +192,7 @@ function Applications() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {applications.map((application) => (
+              {filteredApplications.map((application) => (
                 <tr key={application._id}>
                   <td className="px-5 py-4 font-medium text-ink">{application.company}</td>
                   <td className="px-5 py-4">{application.role}</td>
@@ -185,10 +219,10 @@ function Applications() {
                   </td>
                 </tr>
               ))}
-              {!isLoading && applications.length === 0 && (
+              {!isLoading && filteredApplications.length === 0 && (
                 <tr>
                   <td className="px-5 py-8 text-center text-slate-500" colSpan="5">
-                    No applications yet.
+                    {applications.length === 0 ? 'No applications yet.' : 'No matching applications found.'}
                   </td>
                 </tr>
               )}
