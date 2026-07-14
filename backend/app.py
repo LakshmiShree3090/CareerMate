@@ -5,6 +5,7 @@ from db import db
 from routes.ai_analysis import ai_analysis_bp
 from routes.application import application_bp
 from routes.auth import auth_bp
+from routes.cover_letter import cover_letter_bp
 from routes.resume import resume_bp
 
 app = Flask(__name__)
@@ -19,6 +20,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(application_bp)
 app.register_blueprint(resume_bp)
 app.register_blueprint(ai_analysis_bp)
+app.register_blueprint(cover_letter_bp)
 
 
 @app.route("/")

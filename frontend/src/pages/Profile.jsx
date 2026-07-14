@@ -7,20 +7,23 @@ function Profile() {
   const [profile, setProfile] = useState({ name: '', email: '' })
   const [applications, setApplications] = useState([])
   const [resumeFilename, setResumeFilename] = useState('')
+  const [resumeLibrary, setResumeLibrary] = useState([])
   const [error, setError] = useState('')
 
   useEffect(() => {
     async function loadProfile() {
       try {
-        const [profileResponse, applicationsResponse, resumeResponse] = await Promise.all([
+        const [profileResponse, applicationsResponse, resumeResponse, resumeLibraryResponse] = await Promise.all([
           api.get('/api/auth/me'),
           api.get('/api/applications'),
           api.get('/api/resume'),
+          api.get('/api/resume-library'),
         ])
 
         setProfile(profileResponse.data)
         setApplications(applicationsResponse.data.applications)
         setResumeFilename(resumeResponse.data.filename || '')
+        setResumeLibrary(resumeLibraryResponse.data.resumes || [])
       } catch (requestError) {
         setError(requestError.response?.data?.message || 'Could not load profile')
       }
@@ -66,6 +69,39 @@ function Profile() {
               <dd className="mt-1 font-medium text-ink">{resumeFilename || 'No resume uploaded'}</dd>
             </div>
           </dl>
+        </section>
+
+        <section className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-bold text-ink">Resume Library</h2>
+          {resumeLibrary.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">No resumes uploaded yet.</p>
+          ) : (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {resumeLibrary.map((resume) => (
+                <article className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={resume.filename}>
+                  <p className="font-semibold text-ink">{resume.filename}</p>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-slate-500">Upload Date</dt>
+                      <dd className="text-right font-medium text-slate-700">{resume.uploadDate ? new Date(resume.uploadDate).toLocaleDateString() : 'Unknown'}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-slate-500">Applications Using This Resume</dt>
+                      <dd className="font-medium text-slate-700">{resume.applicationsCount}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <p className="text-sm text-slate-500">Companies</p>
+                    {resume.companies.length === 0 ? (
+                      <p className="mt-1 text-sm font-medium text-slate-700">Not used yet</p>
+                    ) : (
+                      <p className="mt-1 text-sm font-medium text-slate-700">{resume.companies.join(', ')}</p>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

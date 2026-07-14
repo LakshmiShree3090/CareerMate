@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pdfplumber
@@ -13,6 +14,34 @@ UPLOAD_FOLDER = Path(__file__).resolve().parent.parent / "uploads"
 ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
+def save_resume_file(resume_file):
+    if not resume_file or not resume_file.filename:
+        return None, "Resume file is required"
+
+    filename = secure_filename(resume_file.filename)
+    extension = Path(filename).suffix.lower()
+
+    if not filename or extension not in ALLOWED_EXTENSIONS:
+        return None, "Only PDF and DOCX files are allowed"
+
+    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    stored_filename = f"{uuid4().hex}{extension}"
+    resume_file.save(UPLOAD_FOLDER / stored_filename)
+
+    return {
+        "filename": filename,
+        "storedFilename": stored_filename,
+        "uploadedAt": datetime.now(timezone.utc),
+    }, None
+
+
+def format_upload_date(uploaded_at):
+    if isinstance(uploaded_at, datetime):
+        return uploaded_at.isoformat()
+
+    return uploaded_at if isinstance(uploaded_at, str) else None
+
+
 @resume_bp.get("/api/resume")
 @jwt_required()
 def get_resume():
@@ -22,33 +51,62 @@ def get_resume():
     return jsonify({"filename": filename})
 
 
+@resume_bp.get("/api/resume-library")
+@jwt_required()
+def get_resume_library():
+    user_email = get_jwt_identity()
+    resumes_by_stored_filename = {}
+
+    current_resume = db.resumes.find_one({"userEmail": user_email})
+    saved_resumes = []
+    if current_resume:
+        saved_resumes.append(current_resume)
+    saved_resumes.extend(db.application_resumes.find({"userEmail": user_email}))
+
+    for resume in saved_resumes:
+        stored_filename = resume.get("storedFilename")
+        if not stored_filename or stored_filename in resumes_by_stored_filename:
+            continue
+
+        resumes_by_stored_filename[stored_filename] = {
+            "filename": resume.get("filename", "Unnamed resume"),
+            "uploadDate": format_upload_date(resume.get("uploadedAt")),
+            "applicationsCount": 0,
+            "companies": [],
+        }
+
+    for application in db.applications.find({"userEmail": user_email}):
+        resume = resumes_by_stored_filename.get(application.get("resumeStoredFilename"))
+        if not resume:
+            continue
+
+        resume["applicationsCount"] += 1
+        company = application.get("company")
+        if company and company not in resume["companies"]:
+            resume["companies"].append(company)
+
+    return jsonify({"resumes": list(resumes_by_stored_filename.values())})
+
+
 @resume_bp.post("/api/resume/upload")
 @jwt_required()
 def upload_resume():
     resume_file = request.files.get("resume")
+    resume_data, error = save_resume_file(resume_file)
 
-    if not resume_file or not resume_file.filename:
-        return jsonify({"message": "Resume file is required"}), 400
-
-    filename = secure_filename(resume_file.filename)
-    extension = Path(filename).suffix.lower()
-
-    if not filename or extension not in ALLOWED_EXTENSIONS:
-        return jsonify({"message": "Only PDF and DOCX files are allowed"}), 400
+    if error:
+        return jsonify({"message": error}), 400
 
     user_email = get_jwt_identity()
     old_resume = db.resumes.find_one({"userEmail": user_email})
-    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
-
-    stored_filename = f"{uuid4().hex}{extension}"
-    resume_file.save(UPLOAD_FOLDER / stored_filename)
 
     db.resumes.update_one(
         {"userEmail": user_email},
         {
             "$set": {
-                "filename": filename,
-                "storedFilename": stored_filename,
+                "filename": resume_data["filename"],
+                "storedFilename": resume_data["storedFilename"],
+                "uploadedAt": resume_data["uploadedAt"],
                 "userEmail": user_email,
             }
         },
@@ -60,7 +118,7 @@ def upload_resume():
         if old_file.is_file():
             old_file.unlink()
 
-    return jsonify({"message": "Resume uploaded successfully", "filename": filename})
+    return jsonify({"message": "Resume uploaded successfully", "filename": resume_data["filename"]})
 @resume_bp.post("/api/resume/analyze")
 @jwt_required()
 def analyze_resume():
