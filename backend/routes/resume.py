@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pdfplumber
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from werkzeug.utils import secure_filename
 
@@ -86,6 +86,30 @@ def get_resume_library():
             resume["companies"].append(company)
 
     return jsonify({"resumes": list(resumes_by_stored_filename.values())})
+
+
+@resume_bp.get("/api/application-resumes/<stored_filename>")
+@jwt_required()
+def preview_application_resume(stored_filename):
+    application = db.applications.find_one(
+        {
+            "userEmail": get_jwt_identity(),
+            "resumeStoredFilename": stored_filename,
+        }
+    )
+
+    if not application:
+        return jsonify({"message": "Resume not found"}), 404
+
+    resume_path = UPLOAD_FOLDER / stored_filename
+    if not resume_path.is_file():
+        return jsonify({"message": "Resume file not found"}), 404
+
+    return send_file(
+        resume_path,
+        as_attachment=False,
+        download_name=application.get("resumeFilename", stored_filename),
+    )
 
 
 @resume_bp.post("/api/resume/upload")

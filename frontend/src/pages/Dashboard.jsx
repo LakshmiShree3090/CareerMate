@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react'
-import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Legend,
-  LinearScale,
-  Title,
-  Tooltip,
-} from 'chart.js'
-import { Bar } from 'react-chartjs-2'
+import { ArcElement, Chart as ChartJS, Legend, Tooltip } from 'chart.js'
+import { Doughnut } from 'react-chartjs-2'
 import { useNavigate } from 'react-router-dom'
 
 import api from '../services/api'
-import ResumeSection from '../components/ResumeSection'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+ChartJS.register(ArcElement, Tooltip, Legend)
 
 function getDaysUntilInterview(interviewDate) {
-  if (!interviewDate) {
-    return null
-  }
+  if (!interviewDate) return null
 
   const interviewDay = new Date(`${interviewDate}T00:00:00`)
   const today = new Date()
@@ -39,6 +28,7 @@ function Dashboard() {
   const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [resumeFilename, setResumeFilename] = useState('')
+  const [userName, setUserName] = useState('there')
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [popupInterviews, setPopupInterviews] = useState([])
   const hasToken = Boolean(localStorage.getItem('token'))
@@ -61,11 +51,7 @@ function Dashboard() {
               const daysUntil = getDaysUntilInterview(application.interviewDate)
               return daysUntil !== null && daysUntil <= 2
             })
-            .sort((first, second) => {
-              const firstSchedule = `${first.interviewDate}T${first.interviewTime || '00:00'}`
-              const secondSchedule = `${second.interviewDate}T${second.interviewTime || '00:00'}`
-              return firstSchedule.localeCompare(secondSchedule)
-            })
+            .sort((first, second) => `${first.interviewDate}T${first.interviewTime || '00:00'}`.localeCompare(`${second.interviewDate}T${second.interviewTime || '00:00'}`))
 
           if (upcomingPopupInterviews.length > 0) {
             setPopupInterviews(upcomingPopupInterviews)
@@ -77,8 +63,6 @@ function Dashboard() {
       }
     }
 
-    loadApplications()
-
     async function loadResume() {
       try {
         const response = await api.get('/api/resume')
@@ -88,64 +72,60 @@ function Dashboard() {
       }
     }
 
-    loadResume()
+    async function loadUser() {
+      try {
+        const response = await api.get('/api/auth/me')
+        setUserName(response.data.name || 'there')
+      } catch {
+        setUserName('there')
+      }
+    }
 
+    loadApplications()
+    loadResume()
+    loadUser()
     window.addEventListener('applicationsUpdated', loadApplications)
     return () => window.removeEventListener('applicationsUpdated', loadApplications)
   }, [hasToken, navigate])
 
-  const summaryCards = [
-    { label: 'Total Applications', value: applications.length, color: 'border-blue-200 bg-blue-50 text-blue-700' },
-    { label: 'Pending', value: applications.filter((application) => application.status?.toLowerCase() === 'pending').length, color: 'border-amber-200 bg-amber-50 text-amber-700' },
-    { label: 'Selected', value: applications.filter((application) => application.status?.toLowerCase() === 'selected').length, color: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-    { label: 'Rejected', value: applications.filter((application) => application.status?.toLowerCase() === 'rejected').length, color: 'border-rose-200 bg-rose-50 text-rose-700' },
-  ]
-
   const currentDate = new Date()
-  const today = [
-    currentDate.getFullYear(),
-    String(currentDate.getMonth() + 1).padStart(2, '0'),
-    String(currentDate.getDate()).padStart(2, '0'),
-  ].join('-')
+  const today = [currentDate.getFullYear(), String(currentDate.getMonth() + 1).padStart(2, '0'), String(currentDate.getDate()).padStart(2, '0')].join('-')
+  const formattedToday = currentDate.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const pendingCount = applications.filter((application) => application.status?.toLowerCase() === 'pending').length
+  const selectedCount = applications.filter((application) => application.status?.toLowerCase() === 'selected').length
+  const rejectedCount = applications.filter((application) => application.status?.toLowerCase() === 'rejected').length
   const upcomingInterviews = applications
     .filter((application) => application.interviewDate && application.interviewDate >= today)
-    .sort((first, second) => {
-      const firstSchedule = `${first.interviewDate}T${first.interviewTime || '00:00'}`
-      const secondSchedule = `${second.interviewDate}T${second.interviewTime || '00:00'}`
-      return firstSchedule.localeCompare(secondSchedule)
-    })
-  const interviewReminders = applications
-    .map((application) => ({ application, daysUntil: getDaysUntilInterview(application.interviewDate) }))
-    .filter((reminder) => reminder.daysUntil !== null)
-    .sort(({ application: first }, { application: second }) => {
-      const firstSchedule = `${first.interviewDate}T${first.interviewTime || '00:00'}`
-      const secondSchedule = `${second.interviewDate}T${second.interviewTime || '00:00'}`
-      return firstSchedule.localeCompare(secondSchedule)
-    })
+    .sort((first, second) => `${first.interviewDate}T${first.interviewTime || '00:00'}`.localeCompare(`${second.interviewDate}T${second.interviewTime || '00:00'}`))
+  const nextInterview = upcomingInterviews[0]
+  const recentApplications = [...applications]
+    .sort((first, second) => `${second.appliedDate || ''}`.localeCompare(`${first.appliedDate || ''}`))
+    .slice(0, 5)
+
+  const summaryCards = [
+    { label: 'Applications', value: applications.length, subtitle: 'Roles you are tracking', icon: '▦', iconClass: 'bg-blue-50 text-blue-600' },
+    { label: 'Pending', value: pendingCount, subtitle: 'Awaiting an update', icon: '◷', iconClass: 'bg-amber-50 text-amber-600' },
+    { label: 'Selected', value: selectedCount, subtitle: 'Positive outcomes', icon: '↗', iconClass: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Rejected', value: rejectedCount, subtitle: 'Closed applications', icon: '×', iconClass: 'bg-rose-50 text-rose-600' },
+  ]
 
   const chartData = {
     labels: ['Pending', 'Selected', 'Rejected'],
-    datasets: [
-      {
-        label: 'Applications',
-        data: [summaryCards[1].value, summaryCards[2].value, summaryCards[3].value],
-        backgroundColor: ['#f59e0b', '#10b981', '#f43f5e'],
-        borderRadius: 4,
-      },
-    ],
+    datasets: [{
+      data: [pendingCount, selectedCount, rejectedCount],
+      backgroundColor: ['#f59e0b', '#10b981', '#ef4444'],
+      borderColor: '#ffffff',
+      borderWidth: 5,
+      hoverOffset: 5,
+    }],
   }
-
   const chartOptions = {
+    cutout: '70%',
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      title: {
-        display: true,
-        text: 'Application Status',
-      },
-      legend: {
-        display: false,
-      },
+      legend: { position: 'bottom', labels: { boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle', color: '#64748b', padding: 16, font: { family: 'Inter', size: 12 } } },
+      tooltip: { displayColors: false, backgroundColor: '#0f172a', padding: 10 },
     },
   }
 
@@ -154,206 +134,78 @@ function Dashboard() {
     navigate('/login')
   }
 
-  if (!hasToken) {
-    return null
-  }
+  if (!hasToken) return null
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 pb-6">
-          <div>
-            <p className="text-sm font-semibold text-primary">CareerMate</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Welcome to CareerMate</h1>
-            <p className="mt-2 text-slate-600">Track your job application progress at a glance.</p>
-            <button
-              className="mt-4 text-sm font-semibold text-primary hover:underline"
-              onClick={() => navigate('/applications')}
-              type="button"
-            >
-              View Applications
-            </button>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.12),_transparent_28%),linear-gradient(135deg,_#f8fafc_0%,_#eff6ff_100%)] px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="cm-dashboard-hero relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-7 text-white shadow-2xl shadow-blue-950/20 backdrop-blur sm:p-9">
+          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-cyan-200/20 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-indigo-200/20 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-5">
+            <div>
+              <p className="text-sm font-medium text-blue-100">{formattedToday}</p>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Welcome back, {userName}</h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">Track every application. Never lose a resume version.</p>
+              <button className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-primary shadow-lg shadow-blue-950/20 transition hover:-translate-y-0.5 hover:bg-blue-50" onClick={() => navigate('/applications')} type="button">View Applications <span aria-hidden="true">→</span></button>
+            </div>
+            <div className="relative shrink-0">
+              <button aria-expanded={isProfileMenuOpen} aria-label="Profile menu" className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/15 text-sm font-bold text-white backdrop-blur transition hover:bg-white/25" onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)} type="button">{userName.charAt(0).toUpperCase()}</button>
+              {isProfileMenuOpen && <div className="absolute right-0 top-14 z-10 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 text-slate-700 shadow-xl"><button className="w-full px-4 py-2 text-left text-sm font-medium hover:bg-slate-50" onClick={() => navigate('/profile')} type="button">Profile</button><button className="w-full px-4 py-2 text-left text-sm font-medium hover:bg-slate-50" onClick={handleLogout} type="button">Logout</button></div>}
+            </div>
           </div>
-          <div className="relative">
-            <button
-              aria-expanded={isProfileMenuOpen}
-              aria-label="Profile menu"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white transition hover:bg-blue-700"
-              onClick={() => setIsProfileMenuOpen((isOpen) => !isOpen)}
-              type="button"
-            >
-              P
-            </button>
+        </section>
 
-            {isProfileMenuOpen && (
-              <div className="absolute right-0 top-11 z-10 w-32 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
-                <button
-                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
-                  onClick={() => navigate('/profile')}
-                  type="button"
-                >
-                  Profile
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
-                  onClick={handleLogout}
-                  type="button"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
-
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {summaryCards.map((card) => (
-            <article className={`rounded-lg border p-5 ${card.color}`} key={card.label}>
-              <p className="text-sm font-medium">{card.label}</p>
-              <p className="mt-4 text-3xl font-bold">{card.value}</p>
+            <article className="rounded-3xl border border-white/80 bg-white/75 p-5 shadow-lg shadow-slate-900/5 backdrop-blur transition duration-200 hover:-translate-y-1 hover:shadow-xl" key={card.label}>
+              <div className="flex items-start justify-between gap-4">
+                <div><p className="text-sm font-semibold text-slate-600">{card.label}</p><p className="mt-3 text-3xl font-bold tracking-tight text-ink">{card.value}</p></div>
+                <span className={`flex h-11 w-11 items-center justify-center rounded-2xl text-xl font-semibold ${card.iconClass}`}>{card.icon}</span>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">{card.subtitle}</p>
             </article>
           ))}
         </section>
 
-        <section className="mt-8 h-80 rounded-lg border border-slate-200 bg-white p-5">
-          <Bar data={chartData} options={chartOptions} />
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+          <article className="rounded-3xl border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur">
+            <p className="text-sm font-semibold text-primary">Overview</p>
+            <h2 className="mt-1 text-xl font-bold text-ink">Application Progress</h2>
+            <div className="mt-5 h-52"><Doughnut data={chartData} options={chartOptions} /></div>
+          </article>
+
+          <article className="rounded-3xl border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur">
+            <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-primary">Stay prepared</p><h2 className="mt-1 text-xl font-bold text-ink">Next Interview</h2></div><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-lg text-primary">◷</span></div>
+            {nextInterview ? (
+              <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+                <div><p className="text-lg font-bold text-ink">{nextInterview.company}</p><p className="mt-1 text-sm text-slate-600">{nextInterview.role}</p><p className="mt-4 text-sm font-medium text-slate-700">{nextInterview.interviewDate} {nextInterview.interviewTime ? `· ${nextInterview.interviewTime}` : ''}</p></div>
+                <button className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:bg-blue-700" onClick={() => navigate('/applications')} type="button">View Interview</button>
+              </div>
+            ) : <p className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">No upcoming interviews</p>}
+          </article>
         </section>
 
-        <section className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-5">
-          <h2 className="text-lg font-bold text-ink">Interview Reminders</h2>
-          {interviewReminders.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">No upcoming interview reminders.</p>
-          ) : (
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {interviewReminders.map(({ application, daysUntil }) => (
-                <article className="rounded-lg border border-blue-100 bg-white p-4" key={application._id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-ink">{application.company} · {application.role}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {application.interviewDate}{application.interviewTime ? ` at ${application.interviewTime}` : ''}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-primary">
-                      {getReminderLabel(daysUntil)}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm text-slate-600">
-                    {application.interviewMode || 'Mode not set'}{application.interviewLocation ? ` · ${application.interviewLocation}` : ' · Location not set'}
-                  </p>
-                </article>
-              ))}
-            </div>
-          )}
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <article className="rounded-3xl border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur">
+            <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-primary">Your pipeline</p><h2 className="mt-1 text-xl font-bold text-ink">Recent Applications</h2></div><button className="rounded-full border border-blue-100 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-primary transition hover:bg-blue-100" onClick={() => navigate('/applications')} type="button">View All</button></div>
+            {recentApplications.length === 0 ? <p className="mt-6 text-sm text-slate-500">No applications yet.</p> : (
+              <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[440px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-slate-400"><tr><th className="pb-3 font-semibold">Company</th><th className="pb-3 font-semibold">Role</th><th className="pb-3 text-right font-semibold">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{recentApplications.map((application) => <tr key={application._id}><td className="py-3 font-semibold text-ink">{application.company}</td><td className="py-3 text-slate-600">{application.role}</td><td className="py-3 text-right"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{application.status}</span></td></tr>)}</tbody></table></div>
+            )}
+          </article>
+
+          <article className="rounded-3xl border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur">
+            <div className="flex h-full flex-col"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-xl text-secondary">✦</span><p className="mt-5 text-sm font-semibold text-primary">Keep improving</p><h2 className="mt-1 text-xl font-bold text-ink">Resume Intelligence</h2><div className="mt-5 rounded-2xl border border-slate-100 bg-white/80 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Current Resume</p><p className="mt-2 truncate text-sm font-semibold text-ink">{resumeFilename || 'No resume uploaded'}</p><p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Resume Score</p><p className="mt-2 text-sm text-slate-600">Available in Resume Analysis</p></div><button className="mt-6 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:bg-blue-700" onClick={() => navigate('/resume-analysis')} type="button">Open Resume Analysis</button></div>
+          </article>
         </section>
-
-        <section className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-bold text-ink">Upcoming Interviews</h2>
-          {upcomingInterviews.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">No upcoming interviews.</p>
-          ) : (
-            <div className="mt-4 divide-y divide-slate-200">
-              {upcomingInterviews.map((application) => (
-                <article className="flex flex-col gap-1 py-3 first:pt-0 sm:flex-row sm:items-center sm:justify-between" key={application._id}>
-                  <div>
-                    <p className="font-semibold text-ink">{application.company} · {application.role}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {application.interviewMode || 'Interview'}{application.interviewLocation ? ` · ${application.interviewLocation}` : ''}
-                    </p>
-                  </div>
-                  <p className="text-sm font-medium text-primary">{application.interviewDate}{application.interviewTime ? ` at ${application.interviewTime}` : ''}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <ResumeSection />
-
-        {resumeFilename && (
-          <section className="mt-4 flex flex-col gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-emerald-700">Resume Uploaded ✓</p>
-              <p className="mt-2 text-sm text-slate-700">
-                Current Resume: <span className="font-medium">{resumeFilename}</span>
-              </p>
-            </div>
-            <button
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-              onClick={() => navigate('/resume-analysis')}
-              type="button"
-            >
-              Analyze Resume
-            </button>
-          </section>
-        )}
       </div>
 
       {popupInterviews.length > 0 && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/40 px-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-primary">CareerMate</p>
-                <h2 className="mt-1 text-xl font-bold text-ink">Interview Reminders</h2>
-                <p className="mt-1 text-sm text-slate-600">You have upcoming interviews in the next two days.</p>
-              </div>
-              <button
-                aria-label="Dismiss interview reminders"
-                className="text-xl text-slate-500 hover:text-slate-800"
-                onClick={() => setPopupInterviews([])}
-                type="button"
-              >
-                x
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {popupInterviews.map((application) => (
-                <article className="rounded-lg border border-blue-100 bg-blue-50 p-4" key={application._id}>
-                  <p className="font-semibold text-ink">{application.company} · {application.role}</p>
-                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt className="text-slate-500">Interview Date</dt>
-                      <dd className="font-medium text-slate-700">{application.interviewDate}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">Interview Time</dt>
-                      <dd className="font-medium text-slate-700">{application.interviewTime || 'Not set'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">Interview Mode</dt>
-                      <dd className="font-medium text-slate-700">{application.interviewMode || 'Not set'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">Interview Location</dt>
-                      <dd className="font-medium text-slate-700">{application.interviewLocation || 'Not set'}</dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className="text-slate-500">Resume Used</dt>
-                      <dd className="font-medium text-slate-700">{application.resumeFilename || 'No resume linked'}</dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                onClick={() => setPopupInterviews([])}
-                type="button"
-              >
-                Dismiss
-              </button>
-              <button
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-                onClick={() => navigate('/applications')}
-                type="button"
-              >
-                View Application
-              </button>
-            </div>
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/70 bg-white/95 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-3"><span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xl shadow-lg shadow-blue-200 animate-[cm-alert-bell_1.8s_ease-in-out_infinite]">🔔</span><div><p className="text-sm font-semibold text-primary">CareerMate</p><h2 className="text-2xl font-bold text-ink">Interview Alerts</h2></div></div><p className="mt-3 text-sm text-slate-600">You have {popupInterviews.length} upcoming interview{popupInterviews.length === 1 ? '' : 's'}.</p></div><button aria-label="Dismiss interview reminders" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200" onClick={() => setPopupInterviews([])} type="button">×</button></div>
+            <div className="mt-6 space-y-4">{popupInterviews.map((application) => <article className="rounded-2xl border border-blue-100 border-l-4 border-l-primary bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-5 shadow-lg shadow-blue-950/5" key={application._id} style={{ animation: 'cm-reminder-pulse 3s ease-in-out infinite' }}><div className="flex items-start justify-between gap-4"><div className="min-w-0"><h3 className="text-lg font-bold text-ink">{application.company}</h3><p className="mt-1 text-sm font-medium text-slate-600">{application.role}</p></div><span className="shrink-0 rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-sm shadow-blue-200">{getReminderLabel(getDaysUntilInterview(application.interviewDate))}</span></div><div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-slate-700"><span className="inline-flex items-center gap-2">◷ {application.interviewTime || 'Time not set'}</span><span className="inline-flex items-center gap-2">▣ {application.interviewMode || 'Mode not set'}</span></div><button className="mt-5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-blue-200 hover:bg-blue-700" onClick={() => navigate('/applications')} type="button">View Application</button></article>)}</div>
+            <div className="mt-6 flex justify-end"><button className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" onClick={() => setPopupInterviews([])} type="button">Dismiss</button></div>
           </div>
         </div>
       )}
